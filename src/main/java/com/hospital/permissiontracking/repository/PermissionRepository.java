@@ -1,0 +1,20 @@
+package com.hospital.permissiontracking.repository;
+
+import com.hospital.permissiontracking.entity.Permission;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+
+import java.util.List;
+
+public interface PermissionRepository extends JpaRepository<Permission,Long> {
+    // Bir personelin tüm izin kayıtları
+    List<Permission> findByPersonelId(Long personelId);
+
+    // Toplam kullanılan izin
+    @Query("""
+           SELECT COALESCE(SUM(p.usedDays), 0)
+           FROM Permission p
+           WHERE p.personel.id = :personelId
+           """)
+    int getTotalUsedLeave(Long personelId);
+}
