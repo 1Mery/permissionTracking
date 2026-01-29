@@ -12,7 +12,7 @@ public interface PermissionRepository extends JpaRepository<Permission,Long> {
 
     // Toplam kullanılan izin
     @Query("""
-           SELECT COALESCE(SUM(p.usedDays), 0)
+           SELECT COALESCE(SUM(p.usedDays), 0) 
            FROM Permission p
            WHERE p.personel.id = :personelId
            """)
