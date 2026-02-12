@@ -1,4 +1,12 @@
 package com.hospital.permissiontracking.dto;
 
-public class PermissionSummaryDto {
+import java.time.LocalDate;
+
+public record PermissionSummaryDto(
+        Long personelId,
+        int totalLeaveDays,
+        int totalUsedDays,
+        int remainingDays,
+        LocalDate nextWorkDate
+) {
 }
