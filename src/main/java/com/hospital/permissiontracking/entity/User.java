@@ -1,18 +1,27 @@
 package com.hospital.permissiontracking.entity;
 
+import com.hospital.permissiontracking.entity.enums.UserRole;
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "personel")
+@Table(name = "users")
 @Getter
 @Setter
-public class Personel {
+@AllArgsConstructor
+@NoArgsConstructor
+public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    private String email;
+
+    private String password;
 
     @Column(nullable = false)
     private String name;
@@ -22,6 +31,9 @@ public class Personel {
 
     private String department;
 
+    @Enumerated(EnumType.STRING)
+    private UserRole role;
+
     @Column(nullable = false)
-    private int totalLeaveDays;
+    private int totalPermissionDays;
 }
