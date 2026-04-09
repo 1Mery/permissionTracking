@@ -8,7 +8,7 @@ import com.hospital.permissiontracking.dto.user.UserSummaryDto;
 public interface UserService {
     UserResponse register(RegisterUserDto registerUserDto);
 
-    UserResponse login(LoginUserDto loginUserDto);
+    void login(LoginUserDto loginUserDto);
 
     UserResponse getUserById(Long userId);
 
