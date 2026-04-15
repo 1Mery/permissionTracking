@@ -1,107 +1,176 @@
 package com.hospital.permissiontracking.service.impl;
 
-import com.hospital.permissiontracking.dto.PermissionRequestDto;
-import com.hospital.permissiontracking.dto.PermissionSummaryDto;
+import com.hospital.permissiontracking.dto.permission.PermissionRequestDto;
+import com.hospital.permissiontracking.dto.permission.PermissionResponseDto;
 import com.hospital.permissiontracking.entity.Permission;
-import com.hospital.permissiontracking.entity.Personel;
+import com.hospital.permissiontracking.entity.User;
+import com.hospital.permissiontracking.entity.enums.PermissionStatus;
+import com.hospital.permissiontracking.entity.enums.PermissionType;
 import com.hospital.permissiontracking.repository.PermissionRepository;
-import com.hospital.permissiontracking.repository.PersonelRepository;
+import com.hospital.permissiontracking.repository.UserRepository;
 import com.hospital.permissiontracking.service.PermissionService;
-import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
-import java.util.Comparator;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 public class PermissionServiceImpl implements PermissionService {
 
     private final PermissionRepository permissionRepository;
-    private final PersonelRepository personelRepository;
+    private final UserRepository userRepository;
 
-    @Override
-    @Transactional
-    public void addLeave(PermissionRequestDto dto) {
-
-        Personel personel = personelRepository.findById(dto.personelId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Personel bulunamadı"));
-
-        LocalDate start = dto.startDate();
-        LocalDate end = dto.endDate();
-
-        // 1) Tarih kontrol
-        if (start == null || end == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "startDate ve endDate zorunlu.");
-        }
-        if (end.isBefore(start)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "endDate, startDate'ten önce olamaz.");
-        }
-
-        // 2) Çakışma kontrol (repo'da var)
-        if (permissionRepository.existsOverlappingLeave(personel.getId(), start, end)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bu tarih aralığında zaten izin var (çakışıyor).");
-        }
-
-        // 3) usedDays hesapla (takvim günü, dahil)
-        int usedDays = Math.toIntExact(ChronoUnit.DAYS.between(start, end) + 1);
-
-        // 4) Kalan izin kontrol (repo'da getTotalUsedLeave var)
-        int alreadyUsed = permissionRepository.getTotalUsedLeave(personel.getId());
-        int remaining = personel.getTotalLeaveDays() - alreadyUsed;
-
-        if (remaining < usedDays) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Yetersiz izin. Kalan: " + remaining + " gün, İstenen: " + usedDays + " gün"
-            );
-        }
-
-        // 5) Kaydet
-        Permission p = new Permission();
-        p.setPersonel(personel);
-        p.setStartDate(start);
-        p.setEndDate(end);
-        p.setUsedDays(usedDays);
-        p.setPermissionType(dto.permissionType());
-
-        permissionRepository.save(p);
+    public PermissionServiceImpl(PermissionRepository permissionRepository, UserRepository userRepository) {
+        this.permissionRepository = permissionRepository;
+        this.userRepository = userRepository;
     }
 
     @Override
-    public List<Permission> getLeavesByPersonel(Long personelId) {
-        // repo'da var
-        List<Permission> leaves = permissionRepository.findByPersonelId(personelId);
+    public PermissionResponseDto createPermission(PermissionRequestDto requestDto) {
+        User user=userRepository.findById(requestDto.userId()).
+                orElseThrow(()-> new RuntimeException("User not found"));
 
-        // repo'ya orderBy eklemediysen burada sırala
-        leaves.sort(Comparator.comparing(Permission::getStartDate).reversed());
-        return leaves;
+        if (requestDto.startDate() == null || requestDto.endDate() == null) {
+            throw new RuntimeException("Start date and end date can not be null");
+        }
+
+        if (requestDto.endDate().isBefore(requestDto.startDate())) {
+            throw new RuntimeException("End date not be before start date");
+        }
+
+        if (requestDto.startDate().isBefore(LocalDate.now())) {
+            throw new RuntimeException("Permission not be previous time");
+        }
+        if (permissionRepository.existsOverlappingPermissionByUser(requestDto.userId(), requestDto.startDate(),requestDto.endDate(),PermissionStatus.REDDEDİLDİ)){
+            throw new RuntimeException("Overlapping permission exists for given dates");
+        }
+
+        int dayCount= (int) ChronoUnit.DAYS.between(requestDto.startDate(),requestDto.endDate())+1;
+
+        Permission permission= new Permission();
+        permission.setUser(user);
+        permission.setStartDate(requestDto.startDate());
+        permission.setEndDate(requestDto.endDate());
+        permission.setPermissionType(requestDto.permissionType());
+        permission.setPermissionStatus(PermissionStatus.BEKLEMEDE);
+
+        Permission saveP=permissionRepository.save(permission);
+
+        return new PermissionResponseDto(
+                saveP.getId(),
+                saveP.getStartDate(),
+                saveP.getEndDate(),
+                dayCount,
+                saveP.getPermissionStatus(),
+                saveP.getPermissionType()
+        );
     }
 
     @Override
-    public PermissionSummaryDto getPermissionSummary(Long personelId) {
+    public List<PermissionResponseDto> getUserPermissionList(Long userId) {
+        User user= userRepository.findById(userId).
+                orElseThrow(()-> new RuntimeException("User not found"));
 
-        Personel personel = personelRepository.findById(personelId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Personel bulunamadı"));
+        List<Permission> permission=permissionRepository.findByUserId(userId);
 
-        int total = personel.getTotalLeaveDays();
-        int used = permissionRepository.getTotalUsedLeave(personelId);
-        int remaining = total - used;
+        return permission.stream()
+                .map(permission1 -> {
+                    int dayCount= (int) ChronoUnit.DAYS.between(permission1.getStartDate(),permission1.getEndDate())+1;
 
-        // nextWorkDate: son izne göre endDate + 1
-        LocalDate nextWorkDate = null;
-        List<Permission> leaves = permissionRepository.findByPersonelId(personelId);
-        if (!leaves.isEmpty()) {
-            leaves.sort(Comparator.comparing(Permission::getEndDate).reversed());
-            nextWorkDate = leaves.get(0).getEndDate().plusDays(1);
+                    return new PermissionResponseDto(
+                            permission1.getId(),
+                            permission1.getStartDate(),
+                            permission1.getEndDate(),
+                            dayCount,
+                            permission1.getPermissionStatus(),
+                            permission1.getPermissionType()
+                    );
+                }) .toList();
+    }
+
+    @Override
+    public List<PermissionResponseDto> getPendingPermissions() {
+        List<Permission> permission=permissionRepository.findByPermissionStatus(PermissionStatus.BEKLEMEDE);
+
+        return permission.stream()
+                .map(permission1 -> {
+                    int dayCount= (int) ChronoUnit.DAYS.between(permission1.getStartDate(),permission1.getEndDate())+1;
+
+                    return new PermissionResponseDto(
+                            permission1.getId(),
+                            permission1.getStartDate(),
+                            permission1.getEndDate(),
+                            dayCount,
+                            permission1.getPermissionStatus(),
+                            permission1.getPermissionType()
+                    );
+                }) .toList();
+    }
+
+    @Override
+    public PermissionResponseDto approvePermission(Long permissionId) {
+        Permission permission=permissionRepository.findById(permissionId).
+                orElseThrow(()-> new RuntimeException("Permission is not found"));
+
+        if (permission.getPermissionStatus()!=PermissionStatus.BEKLEMEDE){
+            throw new RuntimeException("Only pending permissions can be approved");
         }
 
-        return new PermissionSummaryDto(personelId, total, used, remaining, nextWorkDate);
+        User user=permission.getUser();
+
+        List<Permission> approvedPermissions =permissionRepository.findByUserIdAndPermissionStatus(user.getId(),PermissionStatus.ONAYLANDI);
+
+        int usedDays = approvedPermissions.stream()
+                .mapToInt(permission1 -> (int) ChronoUnit.DAYS.between(
+                        permission1.getStartDate(),
+                        permission1.getEndDate()) + 1)
+                .sum();
+
+        int newDays = (int) ChronoUnit.DAYS.between(
+                permission.getStartDate(),
+                permission.getEndDate()) + 1;
+
+        if (usedDays + newDays > user.getTotalPermissionDays()) {
+            throw new RuntimeException("Not enough permission days");
+        }
+
+        permission.setPermissionStatus(PermissionStatus.ONAYLANDI);
+        Permission p=permissionRepository.save(permission);
+
+        return new PermissionResponseDto(
+                p.getId(),
+                p.getStartDate(),
+                p.getEndDate(),
+                newDays,
+                p.getPermissionStatus(),
+                p.getPermissionType()
+        );
+    }
+
+    @Override
+    public PermissionResponseDto rejectPermission(Long permissionId) {
+        Permission permission=permissionRepository.findById(permissionId).
+                orElseThrow(()-> new RuntimeException("Permission is not found"));
+
+        if (permission.getPermissionStatus()!=PermissionStatus.BEKLEMEDE){
+            throw new RuntimeException("Only pending permissions can be rejected");
+        }
+
+        int dayCount= (int) ChronoUnit.DAYS.between(permission.getStartDate(),permission.getEndDate())+1;
+
+        permission.setPermissionStatus(PermissionStatus.REDDEDİLDİ);
+        Permission p=permissionRepository.save(permission);
+
+        return new PermissionResponseDto(
+                p.getId(),
+                p.getStartDate(),
+                p.getEndDate(),
+                dayCount,
+                p.getPermissionStatus(),
+                p.getPermissionType()
+        );
+
     }
 }
 

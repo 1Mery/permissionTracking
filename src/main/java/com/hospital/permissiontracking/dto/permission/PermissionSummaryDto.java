@@ -1,4 +1,4 @@
-package com.hospital.permissiontracking.dto;
+package com.hospital.permissiontracking.dto.permission;
 
 import java.time.LocalDate;
 

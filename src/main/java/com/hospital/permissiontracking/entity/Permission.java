@@ -1,11 +1,13 @@
 package com.hospital.permissiontracking.entity;
 
+import com.hospital.permissiontracking.entity.enums.PermissionStatus;
 import com.hospital.permissiontracking.entity.enums.PermissionType;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDate;
+import java.util.Date;
 
 @Getter
 @Setter
@@ -18,8 +20,8 @@ public class Permission {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "personel_id", nullable = false)
-    private Personel personel;
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
     @Column(nullable = false)
     private LocalDate startDate;
@@ -27,9 +29,11 @@ public class Permission {
     @Column(nullable = false)
     private LocalDate endDate;
 
-    @Column(nullable = false)
-    private int usedDays;
-
     @Enumerated(EnumType.STRING)
     private PermissionType permissionType;
+
+    @Enumerated(EnumType.STRING)
+    private PermissionStatus permissionStatus;
+
+    private LocalDate createDate;
 }
