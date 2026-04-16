@@ -6,6 +6,10 @@ import com.hospital.permissiontracking.entity.Permission;
 import com.hospital.permissiontracking.entity.User;
 import com.hospital.permissiontracking.entity.enums.PermissionStatus;
 import com.hospital.permissiontracking.entity.enums.PermissionType;
+import com.hospital.permissiontracking.exception.InsufficientPermissionDaysException;
+import com.hospital.permissiontracking.exception.InvalidPermissionStateException;
+import com.hospital.permissiontracking.exception.PermissionNotFoundException;
+import com.hospital.permissiontracking.exception.UserNotFoundException;
 import com.hospital.permissiontracking.repository.PermissionRepository;
 import com.hospital.permissiontracking.repository.UserRepository;
 import com.hospital.permissiontracking.service.PermissionService;
@@ -29,7 +33,7 @@ public class PermissionServiceImpl implements PermissionService {
     @Override
     public PermissionResponseDto createPermission(PermissionRequestDto requestDto) {
         User user=userRepository.findById(requestDto.userId()).
-                orElseThrow(()-> new RuntimeException("User not found"));
+                orElseThrow(()-> new UserNotFoundException("User not found"));
 
         if (requestDto.startDate() == null || requestDto.endDate() == null) {
             throw new RuntimeException("Start date and end date can not be null");
@@ -70,7 +74,7 @@ public class PermissionServiceImpl implements PermissionService {
     @Override
     public List<PermissionResponseDto> getUserPermissionList(Long userId) {
         User user= userRepository.findById(userId).
-                orElseThrow(()-> new RuntimeException("User not found"));
+                orElseThrow(()-> new UserNotFoundException("User not found"));
 
         List<Permission> permission=permissionRepository.findByUserId(userId);
 
@@ -111,10 +115,10 @@ public class PermissionServiceImpl implements PermissionService {
     @Override
     public PermissionResponseDto approvePermission(Long permissionId) {
         Permission permission=permissionRepository.findById(permissionId).
-                orElseThrow(()-> new RuntimeException("Permission is not found"));
+                orElseThrow(()-> new PermissionNotFoundException("Permission is not found"));
 
         if (permission.getPermissionStatus()!=PermissionStatus.BEKLEMEDE){
-            throw new RuntimeException("Only pending permissions can be approved");
+            throw new InvalidPermissionStateException("Only pending permissions can be approved");
         }
 
         User user=permission.getUser();
@@ -132,7 +136,7 @@ public class PermissionServiceImpl implements PermissionService {
                 permission.getEndDate()) + 1;
 
         if (usedDays + newDays > user.getTotalPermissionDays()) {
-            throw new RuntimeException("Not enough permission days");
+            throw new InsufficientPermissionDaysException("Not enough permission days");
         }
 
         permission.setPermissionStatus(PermissionStatus.ONAYLANDI);
@@ -151,10 +155,10 @@ public class PermissionServiceImpl implements PermissionService {
     @Override
     public PermissionResponseDto rejectPermission(Long permissionId) {
         Permission permission=permissionRepository.findById(permissionId).
-                orElseThrow(()-> new RuntimeException("Permission is not found"));
+                orElseThrow(()-> new PermissionNotFoundException("Permission is not found"));
 
         if (permission.getPermissionStatus()!=PermissionStatus.BEKLEMEDE){
-            throw new RuntimeException("Only pending permissions can be rejected");
+            throw new InvalidPermissionStateException("Only pending permissions can be rejected");
         }
 
         int dayCount= (int) ChronoUnit.DAYS.between(permission.getStartDate(),permission.getEndDate())+1;

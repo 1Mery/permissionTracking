@@ -1,14 +1,11 @@
 package com.hospital.permissiontracking.service;
 
-import com.hospital.permissiontracking.dto.user.LoginUserDto;
-import com.hospital.permissiontracking.dto.user.RegisterUserDto;
-import com.hospital.permissiontracking.dto.user.UserResponse;
-import com.hospital.permissiontracking.dto.user.UserSummaryDto;
+import com.hospital.permissiontracking.dto.user.*;
 
 public interface UserService {
     UserResponse register(RegisterUserDto registerUserDto);
 
-    void login(LoginUserDto loginUserDto);
+    LoginResponseDto login(LoginUserDto loginUserDto);
 
     UserResponse getUserById(Long userId);
 

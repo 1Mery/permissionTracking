@@ -11,13 +11,13 @@
 
     <div class="d-flex align-items-center justify-content-between mb-3">
         <div>
-            <a class="text-decoration-none" href="/ui/personels">← Liste</a>
-            <h3 class="m-0" th:text="${personel.name + ' ' + personel.surname}"></h3>
-            <div class="text-muted" th:text="${personel.department}"></div>
+            <a class="text-decoration-none" href="/ui/users">← Liste</a>
+            <h3 class="m-0" th:text="${user.name + ' ' + user.surname}"></h3>
+            <div class="text-muted" th:text="${user.department}"></div>
         </div>
 
         <a class="btn btn-success"
-           th:href="@{/ui/permissions/new(personelId=${personel.id})}">
+           th:href="@{/ui/permissions/new(personelId=${user.id})}">
             + Yeni İzin
         </a>
     </div>

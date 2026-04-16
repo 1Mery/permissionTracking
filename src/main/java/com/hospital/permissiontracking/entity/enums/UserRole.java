@@ -1,6 +1,6 @@
 package com.hospital.permissiontracking.entity.enums;
 
 public enum UserRole {
-    ADMIN,
-    USER
+    ROLE_ADMIN,
+    ROLE_USER
 }

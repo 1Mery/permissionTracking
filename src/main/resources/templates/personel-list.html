@@ -16,14 +16,14 @@
         </div>
 
         <div class="d-flex gap-2 flex-wrap justify-content-end">
-            <form class="d-flex gap-2" method="get" action="/ui/personels">
+            <form class="d-flex gap-2" method="get" action="/ui/users">
                 <input class="form-control" type="text" name="q" placeholder="İsim / Soyisim ara"
                        th:value="${q}">
                 <button class="btn btn-outline-primary" type="submit">Ara</button>
-                <a class="btn btn-outline-secondary" href="/ui/personels">Temizle</a>
+                <a class="btn btn-outline-secondary" href="/ui/users">Temizle</a>
             </form>
 
-            <a class="btn btn-success" href="/ui/personels/new">+ Yeni Personel</a>
+            <a class="btn btn-success" href="/ui/users/new">+ Yeni Personel</a>
         </div>
     </div>
 
@@ -43,21 +43,21 @@
                     </tr>
                     </thead>
                     <tbody>
-                    <tr th:each="p : ${personels}">
+                    <tr th:each="p : ${users}">
                         <td th:text="${p.id}"></td>
                         <td th:text="${p.name + ' ' + p.surname}"></td>
                         <td th:text="${p.department}"></td>
                         <td class="text-end" th:text="${p.totalLeaveDays}"></td>
                         <td class="text-end">
-                            <a class="btn btn-sm btn-primary" th:href="@{/ui/personels/{id}(id=${p.id})}">Detay</a>
+                            <a class="btn btn-sm btn-primary" th:href="@{/ui/users/{id}(id=${p.id})}">Detay</a>
                         </td>
                     </tr>
                     </tbody>
                 </table>
             </div>
 
-            <div th:if="${#lists.isEmpty(personels)}" class="text-muted mt-3">
-                Henüz personel kaydı yok.
+            <div th:if="${#lists.isEmpty(users)}" class="text-muted mt-3">
+                Henüz user kaydı yok.
             </div>
         </div>
     </div>
