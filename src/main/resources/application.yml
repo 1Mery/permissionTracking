@@ -16,3 +16,7 @@ springdoc:
     path: /swagger
   api-docs:
     path: /v3/api-docs
+
+  jwt:
+    secret: guvenli-secret-key-123456789
+    expiration: 3600000

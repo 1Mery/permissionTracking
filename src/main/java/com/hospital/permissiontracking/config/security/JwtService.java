@@ -2,8 +2,8 @@ package com.hospital.permissiontracking.config.security;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
@@ -14,10 +14,16 @@ import java.util.Map;
 @Service
 public class JwtService {
 
-    //token sahtemi
-    private final SecretKey secretKey = Keys.secretKeyFor(SignatureAlgorithm.HS256);
+    @Value("${jwt.secret}")
+    private String secret;
 
-    private final long jwtExpiration = 1000 * 60 * 60; // 1 saat
+    @Value("${jwt.expiration}")
+    private long jwtExpiration;
+
+    private SecretKey getSignKey() {
+        byte[] keyBytes = secret.getBytes();
+        return Keys.hmacShaKeyFor(keyBytes);
+    }
 
     //token üretme
     public String generateToken(String email, String role) {
@@ -30,7 +36,7 @@ public class JwtService {
                 .setSubject(email)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + jwtExpiration))
-                .signWith(secretKey)
+                .signWith(getSignKey())
                 .compact();
     }
 
@@ -57,7 +63,7 @@ public class JwtService {
 
     private Claims extractAllClaims(String token) {
         return Jwts.parserBuilder()
-                .setSigningKey(secretKey)
+                .setSigningKey(getSignKey())
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
