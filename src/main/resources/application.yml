@@ -8,15 +8,16 @@ spring:
       ddl-auto: update
     show-sql: true
 
+security:
+  jwt:
+    secret: guvenli-super-uzun-secret-key-123456789-abcdef-xyz-123456
+    expiration: 3600000
+
 server:
   port: 8081
 
 springdoc:
   swagger-ui:
-    path: /swagger
   api-docs:
     path: /v3/api-docs
 
-  jwt:
-    secret: guvenli-secret-key-123456789
-    expiration: 3600000
