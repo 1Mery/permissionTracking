@@ -10,6 +10,7 @@ import com.hospital.permissiontracking.exception.UserNotFoundException;
 import com.hospital.permissiontracking.repository.PermissionRepository;
 import com.hospital.permissiontracking.repository.UserRepository;
 import com.hospital.permissiontracking.service.UserService;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -105,6 +106,7 @@ public class UserServiceImpl implements UserService {
         );
     }
 
+    @Cacheable(value = "userSummaries",key = "#userId")
     @Override
     public UserSummaryDto getUserSummary(Long userId) {
         User user=repository.findById(userId).
