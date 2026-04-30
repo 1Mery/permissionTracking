@@ -4,6 +4,8 @@ import com.hospital.permissiontracking.dto.permission.PermissionRequestDto;
 import com.hospital.permissiontracking.dto.permission.PermissionResponseDto;
 import com.hospital.permissiontracking.dto.user.*;
 import com.hospital.permissiontracking.entity.User;
+import com.hospital.permissiontracking.entity.enums.UserRole;
+import com.hospital.permissiontracking.exception.ForbiddenAccessException;
 import com.hospital.permissiontracking.service.PermissionService;
 import com.hospital.permissiontracking.service.UserService;
 import jakarta.validation.Valid;
@@ -34,25 +36,26 @@ public class UserController {
 
     @GetMapping("/{userId}")
     public UserResponse getUserById(@PathVariable Long userId) {
+        ensureSelfOrAdmin(userId);
         return userService.getUserById(userId);
     }
 
     //yukardaki endpointin daha güvenli hali. kullanıcı tokendan gelen bilgiyle hareket ediyor. userid direkmen yansıtılmıyor
     @GetMapping("/me")
     public UserResponse getMe() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        User user = (User) authentication.getPrincipal();
-        return userService.getUserById(user.getId());
+        return userService.getUserById(currentUser().getId());
     }
 
     @GetMapping("/{userId}/summary")
     public UserSummaryDto getUserSummary(@PathVariable Long userId) {
+        ensureSelfOrAdmin(userId);
         return userService.getUserSummary(userId);
     }
 
     @PostMapping("/{userId}/permissions")
     public PermissionResponseDto createPermission(@PathVariable Long userId,
                                                   @Valid @RequestBody PermissionRequestDto requestDto) {
+        ensureSelfOrAdmin(userId);
 
         PermissionRequestDto newRequest = new PermissionRequestDto(
                 userId,
@@ -66,6 +69,25 @@ public class UserController {
 
     @GetMapping("/{userId}/permissions")
     public List<PermissionResponseDto> getUserPermissionList(@PathVariable Long userId) {
+        ensureSelfOrAdmin(userId);
         return permissionService.getUserPermissionList(userId);
+    }
+
+    /* ----------------- yardımcı metodlar ----------------- */
+
+    private User currentUser() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof User user)) {
+            throw new ForbiddenAccessException("Authentication required");
+        }
+        return user;
+    }
+
+    private void ensureSelfOrAdmin(Long targetUserId) {
+        User me = currentUser();
+        if (me.getRole() == UserRole.ROLE_ADMIN) return;
+        if (!me.getId().equals(targetUserId)) {
+            throw new ForbiddenAccessException("You are not allowed to access this resource");
+        }
     }
 }

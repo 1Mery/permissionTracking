@@ -5,15 +5,19 @@ import com.hospital.permissiontracking.dto.permission.PermissionResponseDto;
 import com.hospital.permissiontracking.entity.Permission;
 import com.hospital.permissiontracking.entity.User;
 import com.hospital.permissiontracking.entity.enums.PermissionStatus;
-import com.hospital.permissiontracking.entity.enums.PermissionType;
 import com.hospital.permissiontracking.exception.InsufficientPermissionDaysException;
+import com.hospital.permissiontracking.exception.InvalidDateRangeException;
 import com.hospital.permissiontracking.exception.InvalidPermissionStateException;
+import com.hospital.permissiontracking.exception.OverlappingPermissionException;
 import com.hospital.permissiontracking.exception.PermissionNotFoundException;
 import com.hospital.permissiontracking.exception.UserNotFoundException;
 import com.hospital.permissiontracking.repository.PermissionRepository;
 import com.hospital.permissiontracking.repository.UserRepository;
 import com.hospital.permissiontracking.service.PermissionService;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -24,42 +28,43 @@ public class PermissionServiceImpl implements PermissionService {
 
     private final PermissionRepository permissionRepository;
     private final UserRepository userRepository;
+    private final CacheManager cacheManager;
 
-    public PermissionServiceImpl(PermissionRepository permissionRepository, UserRepository userRepository) {
+    public PermissionServiceImpl(PermissionRepository permissionRepository, UserRepository userRepository, CacheManager cacheManager) {
         this.permissionRepository = permissionRepository;
         this.userRepository = userRepository;
+        this.cacheManager = cacheManager;
     }
 
     @Override
+    @Transactional
     public PermissionResponseDto createPermission(PermissionRequestDto requestDto) {
-        User user=userRepository.findById(requestDto.userId()).
-                orElseThrow(()-> new UserNotFoundException("User not found"));
-
-        if (requestDto.startDate() == null || requestDto.endDate() == null) {
-            throw new RuntimeException("Start date and end date can not be null");
-        }
+        User user = userRepository.findById(requestDto.userId())
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
 
         if (requestDto.endDate().isBefore(requestDto.startDate())) {
-            throw new RuntimeException("End date not be before start date");
+            throw new InvalidDateRangeException("End date cannot be before start date");
         }
 
         if (requestDto.startDate().isBefore(LocalDate.now())) {
-            throw new RuntimeException("Permission not be previous time");
-        }
-        if (permissionRepository.existsOverlappingPermissionByUser(requestDto.userId(), requestDto.startDate(),requestDto.endDate(),PermissionStatus.REDDEDİLDİ)){
-            throw new RuntimeException("Overlapping permission exists for given dates");
+            throw new InvalidDateRangeException("Permission start date cannot be in the past");
         }
 
-        int dayCount= (int) ChronoUnit.DAYS.between(requestDto.startDate(),requestDto.endDate())+1;
+        if (permissionRepository.existsOverlappingPermissionByUser(
+                requestDto.userId(), requestDto.startDate(), requestDto.endDate(), PermissionStatus.REDDEDİLDİ)) {
+            throw new OverlappingPermissionException("Overlapping permission exists for given dates");
+        }
 
-        Permission permission= new Permission();
+        int dayCount = (int) ChronoUnit.DAYS.between(requestDto.startDate(), requestDto.endDate()) + 1;
+
+        Permission permission = new Permission();
         permission.setUser(user);
         permission.setStartDate(requestDto.startDate());
         permission.setEndDate(requestDto.endDate());
         permission.setPermissionType(requestDto.permissionType());
         permission.setPermissionStatus(PermissionStatus.BEKLEMEDE);
 
-        Permission saveP=permissionRepository.save(permission);
+        Permission saveP = permissionRepository.save(permission);
 
         return new PermissionResponseDto(
                 saveP.getId(),
@@ -73,108 +78,93 @@ public class PermissionServiceImpl implements PermissionService {
 
     @Override
     public List<PermissionResponseDto> getUserPermissionList(Long userId) {
-        User user= userRepository.findById(userId).
-                orElseThrow(()-> new UserNotFoundException("User not found"));
+        if (!userRepository.existsById(userId)) {
+            throw new UserNotFoundException("User not found");
+        }
 
-        List<Permission> permission=permissionRepository.findByUserId(userId);
-
-        return permission.stream()
-                .map(permission1 -> {
-                    int dayCount= (int) ChronoUnit.DAYS.between(permission1.getStartDate(),permission1.getEndDate())+1;
-
-                    return new PermissionResponseDto(
-                            permission1.getId(),
-                            permission1.getStartDate(),
-                            permission1.getEndDate(),
-                            dayCount,
-                            permission1.getPermissionStatus(),
-                            permission1.getPermissionType()
-                    );
-                }) .toList();
+        return permissionRepository.findByUserId(userId).stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     @Override
     public List<PermissionResponseDto> getPendingPermissions() {
-        List<Permission> permission=permissionRepository.findByPermissionStatus(PermissionStatus.BEKLEMEDE);
-
-        return permission.stream()
-                .map(permission1 -> {
-                    int dayCount= (int) ChronoUnit.DAYS.between(permission1.getStartDate(),permission1.getEndDate())+1;
-
-                    return new PermissionResponseDto(
-                            permission1.getId(),
-                            permission1.getStartDate(),
-                            permission1.getEndDate(),
-                            dayCount,
-                            permission1.getPermissionStatus(),
-                            permission1.getPermissionType()
-                    );
-                }) .toList();
+        return permissionRepository.findByPermissionStatus(PermissionStatus.BEKLEMEDE).stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     @Override
+    @Transactional
     public PermissionResponseDto approvePermission(Long permissionId) {
-        Permission permission=permissionRepository.findById(permissionId).
-                orElseThrow(()-> new PermissionNotFoundException("Permission is not found"));
+        Permission permission = permissionRepository.findById(permissionId)
+                .orElseThrow(() -> new PermissionNotFoundException("Permission is not found"));
 
-        if (permission.getPermissionStatus()!=PermissionStatus.BEKLEMEDE){
+        if (permission.getPermissionStatus() != PermissionStatus.BEKLEMEDE) {
             throw new InvalidPermissionStateException("Only pending permissions can be approved");
         }
 
-        User user=permission.getUser();
+        User user = permission.getUser();
 
-        List<Permission> approvedPermissions =permissionRepository.findByUserIdAndPermissionStatus(user.getId(),PermissionStatus.ONAYLANDI);
+        List<Permission> approvedPermissions = permissionRepository
+                .findByUserIdAndPermissionStatus(user.getId(), PermissionStatus.ONAYLANDI);
 
         int usedDays = approvedPermissions.stream()
-                .mapToInt(permission1 -> (int) ChronoUnit.DAYS.between(
-                        permission1.getStartDate(),
-                        permission1.getEndDate()) + 1)
+                .mapToInt(this::dayCount)
                 .sum();
 
-        int newDays = (int) ChronoUnit.DAYS.between(
-                permission.getStartDate(),
-                permission.getEndDate()) + 1;
+        int newDays = dayCount(permission);
 
         if (usedDays + newDays > user.getTotalPermissionDays()) {
             throw new InsufficientPermissionDaysException("Not enough permission days");
         }
 
         permission.setPermissionStatus(PermissionStatus.ONAYLANDI);
-        Permission p=permissionRepository.save(permission);
+        Permission p = permissionRepository.save(permission);
 
+        evictUserSummary(user.getId());
+
+        return toResponse(p);
+    }
+
+    @Override
+    @Transactional
+    public PermissionResponseDto rejectPermission(Long permissionId) {
+        Permission permission = permissionRepository.findById(permissionId)
+                .orElseThrow(() -> new PermissionNotFoundException("Permission is not found"));
+
+        if (permission.getPermissionStatus() != PermissionStatus.BEKLEMEDE) {
+            throw new InvalidPermissionStateException("Only pending permissions can be rejected");
+        }
+
+        permission.setPermissionStatus(PermissionStatus.REDDEDİLDİ);
+        Permission p = permissionRepository.save(permission);
+
+        return toResponse(p);
+    }
+
+    /* ----------------- yardımcı metodlar ----------------- */
+
+    private int dayCount(Permission p) {
+        return (int) ChronoUnit.DAYS.between(p.getStartDate(), p.getEndDate()) + 1;
+    }
+
+    private PermissionResponseDto toResponse(Permission p) {
         return new PermissionResponseDto(
                 p.getId(),
                 p.getStartDate(),
                 p.getEndDate(),
-                newDays,
+                dayCount(p),
                 p.getPermissionStatus(),
                 p.getPermissionType()
         );
     }
 
-    @Override
-    public PermissionResponseDto rejectPermission(Long permissionId) {
-        Permission permission=permissionRepository.findById(permissionId).
-                orElseThrow(()-> new PermissionNotFoundException("Permission is not found"));
-
-        if (permission.getPermissionStatus()!=PermissionStatus.BEKLEMEDE){
-            throw new InvalidPermissionStateException("Only pending permissions can be rejected");
+    private void evictUserSummary(Long userId) {
+        Cache cache = cacheManager.getCache("userSummaries");
+        if (cache != null) {
+            cache.evict(userId);
         }
-
-        int dayCount= (int) ChronoUnit.DAYS.between(permission.getStartDate(),permission.getEndDate())+1;
-
-        permission.setPermissionStatus(PermissionStatus.REDDEDİLDİ);
-        Permission p=permissionRepository.save(permission);
-
-        return new PermissionResponseDto(
-                p.getId(),
-                p.getStartDate(),
-                p.getEndDate(),
-                dayCount,
-                p.getPermissionStatus(),
-                p.getPermissionType()
-        );
-
     }
 }
 

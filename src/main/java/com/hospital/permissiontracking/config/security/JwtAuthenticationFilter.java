@@ -2,6 +2,7 @@ package com.hospital.permissiontracking.config.security;
 
 import com.hospital.permissiontracking.entity.User;
 import com.hospital.permissiontracking.repository.UserRepository;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -43,25 +44,26 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // token al
         String token = authHeader.substring(7);
 
-        // email çıkar
-        String email = jwtService.extractEmail(token);
+        try {
+            // email çıkar
+            String email = jwtService.extractEmail(token);
 
-        // user bul
-        User user = userRepository.findByEmail(email)
-                .orElse(null);
+            // user bul
+            User user = userRepository.findByEmail(email).orElse(null);
 
-        // user varsa ve token geçerliyse
-        if (user != null && jwtService.isTokenValid(token, user.getEmail())) {
-
-            UsernamePasswordAuthenticationToken authToken;
-            authToken = new UsernamePasswordAuthenticationToken(
-                    user,
-                    null,
-                    List.of(
-                    new SimpleGrantedAuthority(user.getRole().name()))
-            );
-
-            SecurityContextHolder.getContext().setAuthentication(authToken);
+            // user varsa ve token geçerliyse
+            if (user != null && jwtService.isTokenValid(token, user.getEmail())) {
+                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                        user,
+                        null,
+                        List.of(new SimpleGrantedAuthority(user.getRole().name()))
+                );
+                SecurityContextHolder.getContext().setAuthentication(authToken);
+            }
+        } catch (JwtException | IllegalArgumentException ex) {
+            // Geçersiz / süresi dolmuş / hatalı imzalı token: context boş bırakılır,
+            // korunan endpointlerde Spring Security 401 dönecektir.
+            SecurityContextHolder.clearContext();
         }
 
         filterChain.doFilter(request, response);

@@ -7,7 +7,6 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDate;
-import java.util.Date;
 
 @Getter
 @Setter
@@ -35,5 +34,13 @@ public class Permission {
     @Enumerated(EnumType.STRING)
     private PermissionStatus permissionStatus;
 
+    @Column(updatable = false)
     private LocalDate createDate;
+
+    @PrePersist
+    public void onCreate() {
+        if (createDate == null) {
+            createDate = LocalDate.now();
+        }
+    }
 }

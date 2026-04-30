@@ -6,13 +6,17 @@ import com.hospital.permissiontracking.entity.Permission;
 import com.hospital.permissiontracking.entity.User;
 import com.hospital.permissiontracking.entity.enums.PermissionStatus;
 import com.hospital.permissiontracking.entity.enums.UserRole;
+import com.hospital.permissiontracking.exception.EmailAlreadyExistsException;
+import com.hospital.permissiontracking.exception.InvalidCredentialsException;
 import com.hospital.permissiontracking.exception.UserNotFoundException;
 import com.hospital.permissiontracking.repository.PermissionRepository;
 import com.hospital.permissiontracking.repository.UserRepository;
 import com.hospital.permissiontracking.service.UserService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -21,36 +25,38 @@ import java.util.List;
 @Service
 public class UserServiceImpl implements UserService {
 
-    private final UserRepository repository;
+    private final UserRepository userRepository;
     private final PermissionRepository permissionRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
 
-    public UserServiceImpl(UserRepository repository, PermissionRepository permissionRepository, PasswordEncoder passwordEncoder, JwtService jwtService) {
-        this.repository = repository;
+    @Value("${app.default-permission-days:20}")
+    private int defaultPermissionDays;
+
+    public UserServiceImpl(UserRepository userRepository, PermissionRepository permissionRepository, PasswordEncoder passwordEncoder, JwtService jwtService) {
+        this.userRepository = userRepository;
         this.permissionRepository = permissionRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
     }
 
     @Override
+    @Transactional
     public UserResponse register(RegisterUserDto registerUserDto) {
-        boolean exist=repository.existsByEmail(registerUserDto.email());
-        if (exist){
-            throw new IllegalArgumentException("Email already exist");
+        if (userRepository.existsByEmail(registerUserDto.email())) {
+            throw new EmailAlreadyExistsException("Email already exists");
         }
 
-
-        User user= new User();
+        User user = new User();
         user.setEmail(registerUserDto.email());
         user.setPassword(passwordEncoder.encode(registerUserDto.password()));
         user.setName(registerUserDto.name());
         user.setSurname(registerUserDto.surname());
         user.setDepartment(registerUserDto.department());
         user.setRole(UserRole.ROLE_USER);
-        user.setTotalPermissionDays(20);
+        user.setTotalPermissionDays(defaultPermissionDays);
 
-        User saveUser=repository.save(user);
+        User saveUser = userRepository.save(user);
 
         UserResponse userResponse=new UserResponse(
                 saveUser.getId(),
@@ -68,11 +74,11 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public LoginResponseDto login(LoginUserDto loginUserDto) {
-        User user = repository.findByEmail(loginUserDto.email())
-                .orElseThrow(() -> new UserNotFoundException("User not found"));
+        User user = userRepository.findByEmail(loginUserDto.email())
+                .orElseThrow(() -> new InvalidCredentialsException("Invalid email or password"));
 
         if (!passwordEncoder.matches(loginUserDto.password(), user.getPassword())) {
-            throw new RuntimeException("Wrong password");
+            throw new InvalidCredentialsException("Invalid email or password");
         }
 
         String token = jwtService.generateToken(
@@ -92,8 +98,8 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserResponse getUserById(Long userId) {
-        User user=repository.findById(userId).
-                orElseThrow(()->new UserNotFoundException("User not found"));
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
 
         return new UserResponse(
                 user.getId(),
@@ -106,11 +112,11 @@ public class UserServiceImpl implements UserService {
         );
     }
 
-    @Cacheable(value = "userSummaries",key = "#userId")
+    @Cacheable(value = "userSummaries", key = "#userId")
     @Override
     public UserSummaryDto getUserSummary(Long userId) {
-        User user=repository.findById(userId).
-                orElseThrow(()->new UserNotFoundException("User not found"));
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
 
         List<Permission> permissions= permissionRepository.findByUserIdAndPermissionStatus(userId,PermissionStatus.ONAYLANDI);
 

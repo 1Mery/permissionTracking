@@ -13,6 +13,13 @@ spring:
     redis:
       time-to-live: 60000
       cache-null-values: false
+
+  logging:
+    level:
+      org:
+        springframework:
+          cache: TRACE
+
   data:
     redis:
       host: localhost
