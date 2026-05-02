@@ -8,52 +8,67 @@ import com.hospital.permissiontracking.entity.enums.UserRole;
 import com.hospital.permissiontracking.exception.ForbiddenAccessException;
 import com.hospital.permissiontracking.service.PermissionService;
 import com.hospital.permissiontracking.service.UserService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
+@Tag(name = "User API", description = "Kullanıcı kayıt, giriş ve izin talebi işlemleri")
 public class UserController {
 
     private final UserService userService;
     private final PermissionService permissionService;
 
+    @Operation(summary = "Kullanıcı kaydı oluşturur", description = "Sisteme yeni bir kullanıcı kaydeder.")
     @PostMapping("/register")
     public UserResponse register(@Valid @RequestBody RegisterUserDto registerUserDto) {
         return userService.register(registerUserDto);
     }
 
+    @Operation(summary = "Giriş yapar", description = "Kullanıcı adı ve şifre ile sisteme giriş yapar, JWT token döner.")
     @PostMapping("/login")
     public LoginResponseDto login(@Valid @RequestBody LoginUserDto loginUserDto) {
         return userService.login(loginUserDto);
     }
 
+    @Operation(summary = "Kullanıcı bilgilerini getirir", description = "Verilen ID'ye sahip kullanıcının detaylarını getirir. Sadece kullanıcının kendisi veya admin erişebilir.")
     @GetMapping("/{userId}")
-    public UserResponse getUserById(@PathVariable Long userId) {
+    public UserResponse getUserById(@Parameter(description = "Kullanıcı ID'si", required = true) @PathVariable Long userId) {
         ensureSelfOrAdmin(userId);
         return userService.getUserById(userId);
     }
 
-    //yukardaki endpointin daha güvenli hali. kullanıcı tokendan gelen bilgiyle hareket ediyor. userid direkmen yansıtılmıyor
+    @Operation(summary = "Oturum açmış kullanıcının bilgilerini getirir", description = "Token üzerinden işlem yapan kullanıcının kendi detaylarını getirir.")
     @GetMapping("/me")
     public UserResponse getMe() {
         return userService.getUserById(currentUser().getId());
     }
 
+    @Operation(summary = "Kullanıcı özetini getirir", description = "Kullanıcının toplam izin hakkı, kalan izin hakkı gibi özet bilgilerini getirir.")
     @GetMapping("/{userId}/summary")
-    public UserSummaryDto getUserSummary(@PathVariable Long userId) {
+    public UserSummaryDto getUserSummary(@Parameter(description = "Kullanıcı ID'si", required = true) @PathVariable Long userId) {
         ensureSelfOrAdmin(userId);
         return userService.getUserSummary(userId);
     }
 
+    @Operation(summary = "Yeni izin talebi oluşturur", description = "Belirtilen kullanıcı için yeni bir izin talebi oluşturur. İzin geçmiş veya üst üste binen tarihlerde olamaz.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "İzin talebi başarıyla oluşturuldu"),
+            @ApiResponse(responseCode = "400", description = "Geçersiz tarih aralığı veya çakışan izin")
+    })
     @PostMapping("/{userId}/permissions")
-    public PermissionResponseDto createPermission(@PathVariable Long userId,
+    public PermissionResponseDto createPermission(@Parameter(description = "Kullanıcı ID'si", required = true) @PathVariable Long userId,
                                                   @Valid @RequestBody PermissionRequestDto requestDto) {
         ensureSelfOrAdmin(userId);
 
@@ -67,10 +82,12 @@ public class UserController {
         return permissionService.createPermission(newRequest);
     }
 
+    @Operation(summary = "Kullanıcının izinlerini listeler", description = "Belirtilen kullanıcının tüm izin taleplerini (bekleyen, onaylanan, reddedilen) sayfalı olarak getirir.")
     @GetMapping("/{userId}/permissions")
-    public List<PermissionResponseDto> getUserPermissionList(@PathVariable Long userId) {
+    public Page<PermissionResponseDto> getUserPermissionList(@Parameter(description = "Kullanıcı ID'si", required = true) @PathVariable Long userId,
+                                                             @Parameter(description = "Sayfalama parametreleri") Pageable pageable) {
         ensureSelfOrAdmin(userId);
-        return permissionService.getUserPermissionList(userId);
+        return permissionService.getUserPermissionList(userId, pageable);
     }
 
     /* ----------------- yardımcı metodlar ----------------- */

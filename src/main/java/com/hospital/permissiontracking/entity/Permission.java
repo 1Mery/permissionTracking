@@ -34,6 +34,9 @@ public class Permission {
     @Enumerated(EnumType.STRING)
     private PermissionStatus permissionStatus;
 
+    @Column(nullable = false)
+    private Integer dayCount;
+
     @Column(updatable = false)
     private LocalDate createDate;
 

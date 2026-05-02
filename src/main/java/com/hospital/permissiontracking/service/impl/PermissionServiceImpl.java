@@ -16,6 +16,8 @@ import com.hospital.permissiontracking.repository.UserRepository;
 import com.hospital.permissiontracking.service.PermissionService;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -63,6 +65,7 @@ public class PermissionServiceImpl implements PermissionService {
         permission.setEndDate(requestDto.endDate());
         permission.setPermissionType(requestDto.permissionType());
         permission.setPermissionStatus(PermissionStatus.BEKLEMEDE);
+        permission.setDayCount(dayCount);
 
         Permission saveP = permissionRepository.save(permission);
 
@@ -77,21 +80,19 @@ public class PermissionServiceImpl implements PermissionService {
     }
 
     @Override
-    public List<PermissionResponseDto> getUserPermissionList(Long userId) {
+    public Page<PermissionResponseDto> getUserPermissionList(Long userId, Pageable pageable) {
         if (!userRepository.existsById(userId)) {
             throw new UserNotFoundException("User not found");
         }
 
-        return permissionRepository.findByUserId(userId).stream()
-                .map(this::toResponse)
-                .toList();
+        return permissionRepository.findByUserId(userId, pageable)
+                .map(this::toResponse);
     }
 
     @Override
-    public List<PermissionResponseDto> getPendingPermissions() {
-        return permissionRepository.findByPermissionStatus(PermissionStatus.BEKLEMEDE).stream()
-                .map(this::toResponse)
-                .toList();
+    public Page<PermissionResponseDto> getPendingPermissions(Pageable pageable) {
+        return permissionRepository.findByPermissionStatus(PermissionStatus.BEKLEMEDE, pageable)
+                .map(this::toResponse);
     }
 
     @Override
@@ -106,14 +107,8 @@ public class PermissionServiceImpl implements PermissionService {
 
         User user = permission.getUser();
 
-        List<Permission> approvedPermissions = permissionRepository
-                .findByUserIdAndPermissionStatus(user.getId(), PermissionStatus.ONAYLANDI);
-
-        int usedDays = approvedPermissions.stream()
-                .mapToInt(this::dayCount)
-                .sum();
-
-        int newDays = dayCount(permission);
+        int usedDays = permissionRepository.sumDayCountByUserIdAndStatus(user.getId(), PermissionStatus.ONAYLANDI);
+        int newDays = permission.getDayCount();
 
         if (usedDays + newDays > user.getTotalPermissionDays()) {
             throw new InsufficientPermissionDaysException("Not enough permission days");
@@ -145,16 +140,12 @@ public class PermissionServiceImpl implements PermissionService {
 
     /* ----------------- yardımcı metodlar ----------------- */
 
-    private int dayCount(Permission p) {
-        return (int) ChronoUnit.DAYS.between(p.getStartDate(), p.getEndDate()) + 1;
-    }
-
     private PermissionResponseDto toResponse(Permission p) {
         return new PermissionResponseDto(
                 p.getId(),
                 p.getStartDate(),
                 p.getEndDate(),
-                dayCount(p),
+                p.getDayCount() != null ? p.getDayCount() : (int) ChronoUnit.DAYS.between(p.getStartDate(), p.getEndDate()) + 1, // Fallback for old data
                 p.getPermissionStatus(),
                 p.getPermissionType()
         );
